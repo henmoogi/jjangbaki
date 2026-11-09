@@ -54,9 +54,10 @@ body {
 header.top { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
 .mark { font-family: var(--font-mark); font-size: 32px; letter-spacing: 0.02em; line-height: 1; }
 .mark b { color: var(--door); font-weight: 400; }
-.tag { color: var(--muted); font-size: 14px; }
+.tag { color: var(--muted); font-size: 14px; word-break: keep-all; text-wrap: balance; }
 /* language switch: top right, out of the way of the brand line */
-header.top { position: relative; padding-right: 76px; }
+header.top { position: relative; padding-right: 60px; }
+html[lang="en"] header.top { padding-right: 80px; }
 .lang { position: absolute; right: 0; top: 2px; border: 1px solid var(--rule); background: var(--panel); color: var(--ink); border-radius: 999px; padding: 4px 12px; font-size: 13px; font-weight: 500; }
 .lang:hover { background: var(--ground); }
 /* English names run longer than the Korean ones the stop column was sized for: a size smaller, broken with a hyphen */
@@ -962,7 +963,9 @@ if (typeof module !== 'undefined') module.exports = { makeRouter, doorAt, descri
       const g0 = plan.legs[0], dep = g0.best ? g0.best.dep : when.T, about = plan.est || !g0.best ? tr('약 ', 'about ') : '';
       clock.append(el('strong', null, tr(`${hm(dep)} 출발`, `Leave ${hm(dep)}`)), el('span', 's', '→'), el('strong', null, tr(`${about}${hm(plan.arrive)} 도착`, `arrive ${about}${hm(plan.arrive)}`)));
       // without a timetable for the first ride the length is already in the facts above
-      const len = g0.best ? tr(`${about}${Math.round((plan.arrive - dep) / 2)}분 · `, `${about}${Math.round((plan.arrive - dep) / 2)} min · `) : '';
+      // minutes between the two clock times shown (times are kept to 30 seconds, the screen shows whole minutes)
+      const span = Math.floor(plan.arrive / 2) - Math.floor(dep / 2);
+      const len = g0.best ? tr(`${about}${span}분 · `, `${about}${span} min · `) : '';
       clock.append(el('span', 's', tr(`${len}${dayWord} 시간표${plan.est ? ' · 시간표 없는 구간은 어림' : ''}`, `${len}${dayWord} timetable${plan.est ? ' · estimated where there is no timetable' : ''}`)));
     } else {
       clock.append(el('strong', null, tr('오늘 열차가 끊긴 구간이 있어요', 'No more trains today on part of this route')), el('span', 's', tr(`${hm(when.T)} 출발 기준 · ${dayWord} 시간표`, `leaving ${hm(when.T)} · ${dayWord} timetable`)));
@@ -1001,7 +1004,8 @@ if (typeof module !== 'undefined') module.exports = { makeRouter, doorAt, descri
     const w = el('div', 'ride-when');
     if (g.best) {
       w.append(el('strong', null, tr(`${g.est ? '약 ' : ''}${hm(g.best.dep)} 출발`, `Leaves ${g.est ? 'about ' : ''}${hm(g.best.dep)}`)));
-      w.append(el('span', 's', g.wait < 2 ? tr('곧 와요', 'due now') : tr(`${Math.round(g.wait / 2)}분 기다림`, `${Math.round(g.wait / 2)} min wait`)));
+      const waitMin = Math.floor(g.best.dep / 2) - Math.floor(g.at / 2);   // as the clock times on screen differ
+      w.append(el('span', 's', waitMin < 1 ? tr('곧 와요', 'due now') : tr(`${waitMin}분 기다림`, `${waitMin} min wait`)));
       if (g.next) w.append(el('span', 's', tr(`다음 열차 ${hm(g.next.dep)}`, `next ${hm(g.next.dep)}`)));
       if (g.last && g.last.dep - g.at <= 120) w.append(el('span', 's', tr(`막차 ${hm(g.last.dep)}`, `last train ${hm(g.last.dep)}`)));
       const np = d.stops.filter(s => s.pass).length;
