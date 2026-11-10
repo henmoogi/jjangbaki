@@ -114,45 +114,51 @@ button { cursor: pointer; }
 .swap-s { border: 1px solid var(--rule); background: var(--panel); border-radius: 10px; width: 38px; color: var(--muted); }
 /* route map: sizes come from CSS variables in map units that the script sets for each zoom step */
 .mapbox { position: relative; height: min(64vh, 520px); min-height: 320px; border-radius: 12px; overflow: hidden; background: var(--mapbg); border: 1px solid var(--rule); isolation: isolate; }
+/* Ground-coloured paints in the SVG (label halos, marker insides, the veil, pin faces) are one-colour gradients, not flat colours.
+   A browser's forced dark (Samsung Internet's dark mode, Chrome's auto dark) darkens light backgrounds but treats flat SVG
+   colours like text: dark ones turn light and light ones stay. A flat light halo then stayed light around text that had turned
+   light, and the names blurred. Gradients are recoloured exactly like backgrounds, so they darken together with the map box. */
+#map .pbm { stop-color: var(--mapbg); }
+#map .pbp { stop-color: var(--panel); }
 #map { width: 100%; height: 100%; display: block; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; cursor: grab; }
 #map.dragging { cursor: grabbing; }
 #map .ml, #map .rc, #map .rl, #map .so, #map .si, #map .io, #map .ii, #map .rso, #map .rsi, #map .rio, #map .rii { fill: none; stroke-linecap: round; stroke-linejoin: round; }
 #map .ml { stroke: var(--c); stroke-width: calc(var(--lw) * 1px); }
 #map .ml.lr { stroke-width: calc(var(--lw) * .66px); }
 #map .ml.gx { stroke-width: calc(var(--lw) * 1.8px); }
-#map .ml.gxi { stroke: var(--mapbg); stroke-width: calc(var(--lw) * .6px); }
+#map .ml.gxi { stroke: url(#pb-map) var(--mapbg); stroke-width: calc(var(--lw) * .6px); }
 #map .so { stroke: var(--c); stroke-width: calc(var(--so) * 1px); }
-#map .si { stroke: var(--mapbg); stroke-width: calc(var(--si) * 1px); }
+#map .si { stroke: url(#pb-map) var(--mapbg); stroke-width: calc(var(--si) * 1px); }
 #map .io { stroke: var(--ink); stroke-width: calc(var(--io) * 1px); }
-#map .ii { stroke: var(--mapbg); stroke-width: calc(var(--ii) * 1px); }
+#map .ii { stroke: url(#pb-map) var(--mapbg); stroke-width: calc(var(--ii) * 1px); }
 #map.lo .so, #map.lo .si { display: none; }
 /* a found route: the rest of the network steps back behind a veil */
-#map .veil { fill: var(--mapbg); opacity: 0; pointer-events: none; }
+#map .veil { fill: url(#pb-map) var(--mapbg); opacity: 0; pointer-events: none; }
 #map.routing .veil { opacity: .52; }
-#map .rc { stroke: var(--mapbg); stroke-width: calc(var(--rc) * 1px); }
+#map .rc { stroke: url(#pb-map) var(--mapbg); stroke-width: calc(var(--rc) * 1px); }
 #map .rl { stroke: var(--c); stroke-width: calc(var(--rw) * 1px); }
 #map .rso { stroke: var(--c); stroke-width: calc(var(--rso) * 1px); }
-#map .rsi { stroke: var(--mapbg); stroke-width: calc(var(--rsi) * 1px); }
+#map .rsi { stroke: url(#pb-map) var(--mapbg); stroke-width: calc(var(--rsi) * 1px); }
 #map .rio { stroke: var(--ink); stroke-width: calc(var(--rio) * 1px); }
-#map .rii { stroke: var(--mapbg); stroke-width: calc(var(--rii) * 1px); }
+#map .rii { stroke: url(#pb-map) var(--mapbg); stroke-width: calc(var(--rii) * 1px); }
 /* overlay coordinates are screen pixels */
 #map .over { pointer-events: none; }
-#map .lbl { font-family: var(--font-body); font-weight: 500; fill: var(--ink); paint-order: stroke fill; stroke: var(--mapbg); stroke-width: 3.4px; stroke-linejoin: round; }
+#map .lbl { font-family: var(--font-body); font-weight: 500; fill: var(--ink); paint-order: stroke fill; stroke: url(#pb-map) var(--mapbg); stroke-width: 3.4px; stroke-linejoin: round; }
 #map .lbl.b { font-weight: 700; }
 #map .lbl.off, #map .lbl.dim { fill: var(--muted); }
-#map .bdg rect { stroke: var(--mapbg); stroke-width: 1.5px; }
+#map .bdg rect { stroke: url(#pb-map) var(--mapbg); stroke-width: 1.5px; }
 #map .bdg text { font-family: var(--font-body); font-size: 9.5px; font-weight: 700; text-anchor: middle; }
 #map.routing .bdg { opacity: .3; }
 #map .pin text { font-family: var(--font-body); }
-#map .pin .halo { fill: none; stroke: var(--mapbg); stroke-width: 5px; stroke-linejoin: round; }
+#map .pin .halo { fill: none; stroke: url(#pb-map) var(--mapbg); stroke-width: 5px; stroke-linejoin: round; }
 #map .pin .body { stroke-width: 1.5px; stroke-linejoin: round; }
 #map .pin .tag { font-size: 11px; font-weight: 500; }
 #map .pin .nm { font-size: 13.5px; font-weight: 700; }
-#map .pin.from .body { fill: var(--panel); stroke: var(--ink); }
+#map .pin.from .body { fill: url(#pb-panel) var(--panel); stroke: var(--ink); }
 #map .pin.from .nm { fill: var(--ink); }
 #map .pin.from .tag { fill: var(--muted); }
 #map .pin.to .body { fill: var(--ink); stroke: var(--ink); }
-#map .pin.to text { fill: var(--panel); }
+#map .pin.to text { fill: url(#pb-panel) var(--panel); }
 #map .pin.to .tag { opacity: .75; }
 #map .sel { fill: none; stroke: var(--focus); stroke-width: 2.5px; }
 /* dark ground: lift line colours a little toward the ink so navy and olive lines keep their edge */
@@ -169,10 +175,10 @@ button { cursor: pointer; }
 .zoom button:hover, .zoom button:active { background: var(--ground); }
 #zin { border-radius: 10px 10px 0 0; border-bottom: 0; }
 #zout { border-radius: 0 0 10px 10px; }
-#zfit { margin-top: 8px; border-radius: 10px; font-size: 0; }
-#zfit::before { content: ""; width: 18px; height: 18px; background: currentColor;
-  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5'/%3E%3C/svg%3E") center / contain no-repeat;
-  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5'/%3E%3C/svg%3E") center / contain no-repeat; }
+#zfit { margin-top: 8px; border-radius: 10px; }
+/* the icon is an inline SVG stroke in the ink colour: forced dark turns it light with the text,
+   where a masked background in the ink colour stayed dark on the darkened button */
+#zfit svg { display: block; }
 .maphint[hidden] { display: none; }
 .maphint { position: absolute; left: 10px; bottom: 10px; max-width: calc(100% - 20px); font-size: 12px; line-height: 1.4; color: var(--muted); pointer-events: none; background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 5px 10px; box-shadow: 0 1px 2px rgba(0, 0, 0, .08); word-break: keep-all; text-wrap: balance; }
 
@@ -303,6 +309,36 @@ button.name[aria-expanded="true"] strong { text-decoration-color: var(--ink); }
   @keyframes rise { from { transform: translateY(4px); } to { transform: none; } }
 }
 </style>
+<script>
+// A browser's forced dark (Samsung Internet's dark mode, Chrome's auto dark) repaints this light page in its own greys
+// even when the page has dark colours, because the browser does not tell the page that dark is wanted.
+// Chromium gives itself away: under forced dark, the system background colour of a light-scheme element turns dark.
+// Then the page switches to its own dark colours. Runs before the page is drawn, and again when the rider comes back to it
+// (the setting may have changed meanwhile). Where this is not detected the forced dark still reads well (see map.part.css).
+(function () {
+  var root = document.documentElement;
+  function forcedDark() {
+    try {
+      if (window.matchMedia && matchMedia('(forced-colors: active)').matches) return false;
+      var probe = document.createElement('div');
+      probe.style.cssText = 'position:absolute;width:0;height:0;color-scheme:light;background-color:Canvas';
+      root.appendChild(probe);
+      var bg = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      // only an opaque rgb() answer counts: a browser without the Canvas keyword leaves it transparent
+      var m = /^rgb\((\d+), (\d+), (\d+)\)$/.exec(bg);
+      return !!m && +m[1] + +m[2] + +m[3] < 200;
+    } catch (e) { return false; }
+  }
+  function sync() {
+    if (forcedDark()) root.setAttribute('data-theme', 'dark');
+    else root.removeAttribute('data-theme');
+  }
+  sync();
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) sync(); });
+  window.addEventListener('pageshow', sync);
+})();
+</script>
 
 </head>
 <body>
@@ -329,7 +365,7 @@ button.name[aria-expanded="true"] strong { text-decoration-color: var(--ink); }
         <div class="zoom">
           <button type="button" id="zin" aria-label="확대" data-en-aria="Zoom in">+</button>
           <button type="button" id="zout" aria-label="축소" data-en-aria="Zoom out">−</button>
-          <button type="button" id="zfit" aria-label="전체 보기" data-en-aria="Show whole map">⤢</button>
+          <button type="button" id="zfit" aria-label="전체 보기" data-en-aria="Show whole map"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg></button>
         </div>
         <div class="pop" id="pop" hidden>
           <div class="pop-name"><strong id="pop-name"></strong><span id="pop-badges" class="badges"></span></div>
@@ -1446,6 +1482,17 @@ if (typeof module !== 'undefined') module.exports = { makeRouter, doorAt, descri
     }
     const dot = (p) => `M${f2(p[0])} ${f2(p[1])}h0.001`;
 
+    // ---- one-colour gradients for paints that must darken like a background under a browser's forced dark (see map.part.css) ----
+    // user-space units: a bounding-box gradient paints nothing on a straight line or a single dot, whose box has no height
+    const defs = mk('defs', {}, svg), paints = new Map();
+    const solid = (id, stop) => { const g = mk('linearGradient', { id, gradientUnits: 'userSpaceOnUse', x1: 0, y1: 0, x2: 1, y2: 0 }, defs); for (const o of [0, 1]) mk('stop', { offset: o, ...stop }, g); };
+    solid('pb-map', { class: 'pbm' }); solid('pb-panel', { class: 'pbp' });
+    // a fixed colour (line badges) painted the same way; the flat colour is the fallback
+    const paintOf = (color) => {
+      if (!paints.has(color)) { const id = 'pb-c' + paints.size; solid(id, { 'stop-color': color }); paints.set(color, `url(#${id}) ${color}`); }
+      return paints.get(color);
+    };
+
     // ---- draw the network once ----
     const gNet = mk('g', { class: 'net' }, svg);
     for (const l of lines) {
@@ -1576,8 +1623,9 @@ if (typeof module !== 'undefined') module.exports = { makeRouter, doorAt, descri
         if (grid.hits(bb, -10 - bi)) return;
         grid.add(bb, -10 - bi);
         const g = mk('g', { class: 'bdg', transform: `translate(${f2(x)} ${f2(y)})` }, gB);
-        mk('rect', { x: f2(-w / 2), y: -h / 2, width: w, height: h, rx: h / 2, fill: I.color }, g);
-        mk('text', { y: 3.4, fill: lum(I.color) > 0.36 ? '#15202A' : '#FFFFFF' }, g).textContent = I.short;
+        // badge face and dark lettering keep their colours under forced dark; white lettering already does as a flat colour
+        mk('rect', { x: f2(-w / 2), y: -h / 2, width: w, height: h, rx: h / 2, fill: paintOf(I.color) }, g);
+        mk('text', { y: 3.4, fill: lum(I.color) > 0.36 ? paintOf('#15202A') : '#FFFFFF' }, g).textContent = I.short;
       });
       // station markers block every label but their own (a little give at the rim)
       for (const s of stations) if (s.ic || SZ.stops || (route && route.st.has(s))) { const r = markerR(s) - 1.5, b = [X(s.bx0) - r, X(s.by0) - r, X(s.bx1) + r, X(s.by1) + r]; b.off = veiled && !route.st.has(s); grid.add(b, s.i); }
