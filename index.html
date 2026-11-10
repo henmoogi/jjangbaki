@@ -143,7 +143,15 @@ button { cursor: pointer; }
 #map .rii { stroke: url(#pb-map) var(--mapbg); stroke-width: calc(var(--rii) * 1px); }
 /* overlay coordinates are screen pixels */
 #map .over { pointer-events: none; }
-#map .lbl { font-family: var(--font-body); font-weight: 500; fill: var(--ink); paint-order: stroke fill; stroke: url(#pb-map) var(--mapbg); stroke-width: 3.4px; stroke-linejoin: round; }
+#map .lbl { font-family: var(--font-body); font-weight: 500; fill: var(--ink); }
+/* names get their outline from a filter that picks its colour from the letters as painted (map.part.js 'halo-l') */
+#map .names { filter: url(#halo-l); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) #map .names { filter: url(#halo-d); } }
+:root[data-theme="dark"] #map .names { filter: url(#halo-d); }
+/* pin halos are not painted: their copies in the mask 'cut-m' cut them out of the map below, which shows the map box's
+   background. Only the copies in .cutsrc show the halo, for its size. */
+#map .over .pin .halo { visibility: hidden; }
+#map g.cutsrc .pin .body { fill: #000; }   /* the whole face is cut, also where the start pin's face is left unpainted */
 #map .lbl.b { font-weight: 700; }
 #map .lbl.off, #map .lbl.dim { fill: var(--muted); }
 #map .bdg rect { stroke: url(#pb-map) var(--mapbg); stroke-width: 1.5px; }
@@ -154,11 +162,16 @@ button { cursor: pointer; }
 #map .pin .body { stroke-width: 1.5px; stroke-linejoin: round; }
 #map .pin .tag { font-size: 11px; font-weight: 500; }
 #map .pin .nm { font-size: 13.5px; font-weight: 700; }
-#map .pin.from .body { fill: url(#pb-panel) var(--panel); stroke: var(--ink); }
+/* start pin: on the light map its face is the cut, so the map box's background (a forced dark darkens it; a white SVG face
+   stayed light grey under Samsung Internet's). The page's own dark keeps its panel face. */
+#map .pin.from .body { fill: none; stroke: var(--ink); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) #map .pin.from .body { fill: url(#pb-panel) var(--panel); } }
+:root[data-theme="dark"] #map .pin.from .body { fill: url(#pb-panel) var(--panel); }
 #map .pin.from .nm { fill: var(--ink); }
 #map .pin.from .tag { fill: var(--muted); }
+/* end pin: an ink face with its name cut out (mask 'pin-m'), so the letters are the ground whatever a forced dark does to the ink */
 #map .pin.to .body { fill: var(--ink); stroke: var(--ink); }
-#map .pin.to text { fill: url(#pb-panel) var(--panel); }
+#map .over .pin.to text { visibility: hidden; }
 #map .pin.to .tag { opacity: .75; }
 #map .sel { fill: none; stroke: var(--focus); stroke-width: 2.5px; }
 /* dark ground: lift line colours a little toward the ink so navy and olive lines keep their edge */
@@ -1487,6 +1500,33 @@ if (typeof module !== 'undefined') module.exports = { makeRouter, doorAt, descri
     const defs = mk('defs', {}, svg), paints = new Map();
     const solid = (id, stop) => { const g = mk('linearGradient', { id, gradientUnits: 'userSpaceOnUse', x1: 0, y1: 0, x2: 1, y2: 0 }, defs); for (const o of [0, 1]) mk('stop', { offset: o, ...stop }, g); };
     solid('pb-map', { class: 'pbm' }); solid('pb-panel', { class: 'pbp' });
+
+    // ---- outlines that survive Samsung Internet's dark mode (v30, checked on the rider's phone 2026-11-10) ----
+    // It turns dark letters light but keeps a light outline light, flat or gradient, so a painted outline blurred the names.
+    // Station names: the outline colour is worked out inside a filter from the letters as painted, after the browser has
+    // recoloured them: dark letters get the light map ground, light letters a dark one (#1D1E1F is the ground Samsung's and
+    // Chrome's dark modes give #FBFCFD; the page's own dark uses its own ground). The 13th test on the phone.
+    const frac = (hex) => [1, 3, 5].map(i => (parseInt(hex.substr(i, 2), 16) / 255).toFixed(3));
+    const haloOf = (id, light, dark) => {
+      const f = mk('filter', { id, 'color-interpolation-filters': 'sRGB' }, defs), L = frac(light), D = frac(dark);
+      mk('feMorphology', { in: 'SourceGraphic', operator: 'dilate', radius: 1.7, result: 'fat' }, f);
+      mk('feColorMatrix', { in: 'fat', type: 'matrix', values: '.299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 0 0 0 1 0' }, f);
+      const t = mk('feComponentTransfer', {}, f);
+      ['R', 'G', 'B'].forEach((c, i) => mk('feFunc' + c, { type: 'discrete', tableValues: L[i] + ' ' + D[i] }, t));
+      const m = mk('feMerge', {}, f); mk('feMergeNode', {}, m); mk('feMergeNode', { in: 'SourceGraphic' }, m);
+    };
+    haloOf('halo-l', '#FBFCFD', '#1D1E1F'); haloOf('halo-d', '#FBFCFD', '#111A21');
+    // Start/end pins: their outline (and the start pin's face) is cut out of the map below them, so the map box's own
+    // background shows there in whatever colour a dark mode gives it (the 11th test). The mask counts only how much the
+    // copies of the pins cover (an alpha mask), so their colours do not matter. Names are not cut this way: a second copy of
+    // every name made each frame of a pan half as slow again.
+    const AREA = { x: FULL.x - 400, y: FULL.y - 400, width: FULL.w + 800, height: FULL.h + 800 };
+    const cutOut = (id, attrs) => { const f = mk('filter', { id, filterUnits: 'userSpaceOnUse', ...attrs }, defs); mk('feFlood', { 'flood-opacity': 1, result: 'all' }, f); mk('feComposite', { in: 'all', in2: 'SourceAlpha', operator: 'out' }, f); return f; };
+    const alphaMask = (id, attrs) => mk('mask', { id, maskUnits: 'userSpaceOnUse', ...attrs, 'mask-type': 'alpha', style: 'mask-type:alpha' }, defs);
+    cutOut('cut-f', AREA);
+    const cutSrc = mk('g', { class: 'cutsrc' }, mk('g', { filter: 'url(#cut-f)' }, alphaMask('cut-m', AREA)));
+    // the end pin's dark face has its name cut out the same way: under a forced dark the face turns light and the name stays the ground
+    const pinF = cutOut('pin-f', {}), pinM = alphaMask('pin-m', {});
     // a fixed colour (line badges) painted the same way; the flat colour is the fallback
     const paintOf = (color) => {
       if (!paints.has(color)) { const id = 'pb-c' + paints.size; solid(id, { 'stop-color': color }); paints.set(color, `url(#${id}) ${color}`); }
@@ -1494,7 +1534,8 @@ if (typeof module !== 'undefined') module.exports = { makeRouter, doorAt, descri
     };
 
     // ---- draw the network once ----
-    const gNet = mk('g', { class: 'net' }, svg);
+    const gUnder = mk('g', { class: 'under', mask: 'url(#cut-m)' }, svg);
+    const gNet = mk('g', { class: 'net' }, gUnder);
     for (const l of lines) {
       const runs = l.runs.filter(r => r.D.length > 1);
       if (!runs.length) continue;
@@ -1513,11 +1554,12 @@ if (typeof module !== 'undefined') module.exports = { makeRouter, doorAt, descri
     mk('path', { d: icD, class: 'io' }, gNet);
     mk('path', { d: icD, class: 'ii' }, gNet);
     // found route sits above a veil that quiets the rest of the network
-    mk('rect', { class: 'veil', x: FULL.x - 400, y: FULL.y - 400, width: FULL.w + 800, height: FULL.h + 800 }, svg);
-    const gRoute = mk('g', { class: 'route' }, svg);
-    // overlay: drawn in screen pixels for the current zoom step
-    const gOver = mk('g', { class: 'over' }, svg);
-    const gB = mk('g', {}, gOver), gL = mk('g', {}, gOver), gSel = mk('g', {}, gOver), gP = mk('g', {}, gOver);
+    mk('rect', { class: 'veil', ...AREA }, gUnder);
+    const gRoute = mk('g', { class: 'route' }, gUnder);
+    // overlay: drawn in screen pixels for the current zoom step.
+    // The ring round a chosen station lies with the map below the pins, so a pin's cut hides it as its face did.
+    const gOver = mk('g', { class: 'over' }, svg), gSelIn = mk('g', {}, gUnder);
+    const gB = mk('g', {}, gOver), gL = mk('g', { class: 'names' }, gOver), gSel = mk('g', {}, gSelIn), gP = mk('g', {}, gOver);
     const badges = [];
     for (const l of lines) for (const r of l.runs) for (const p of r.P) if (flag(p).includes('I') && info(l.id).short) badges.push({ id: l.id, x: p[0], y: p[1] });
     const labels = stations.map(s => { const parts = s.label.split('\n'); return { s, parts, wEm: Math.max(...parts.map(em)) }; });
@@ -1591,8 +1633,9 @@ if (typeof module !== 'undefined') module.exports = { makeRouter, doorAt, descri
       dirty = false;
       if (!SZ) return;
       const k = KO = K, X = (v) => v * k;
-      gOver.setAttribute('transform', `scale(${(1 / k).toFixed(5)})`);
-      gB.textContent = ''; gL.textContent = ''; gP.textContent = '';
+      const sc = `scale(${(1 / k).toFixed(5)})`;
+      for (const g of [gOver, gSelIn, cutSrc]) g.setAttribute('transform', sc);
+      gB.textContent = ''; gL.textContent = ''; gP.textContent = ''; pinM.textContent = '';
       const grid = makeGrid(72);
       // start and end pins win every collision
       const placed = [], endSet = new Set();
@@ -1611,10 +1654,17 @@ if (typeof module !== 'undefined') module.exports = { makeRouter, doorAt, descri
         placed.push(bb); grid.add([bb[0] - 2, bb[1] - 2, bb[2] + 2, bb[3] + 2], -2);
         const g = mk('g', { class: 'pin ' + cls, transform: `translate(${f2(tip[0])} ${f2(tip[1])})` }, gP);
         const d = pinPath(W, H, ph, below);
-        mk('path', { d, class: 'halo' }, g); mk('path', { d, class: 'body' }, g);
+        mk('path', { d, class: 'halo' }, g);
+        const body = mk('path', { d, class: 'body' }, g);
         const mid = below ? ph + H / 2 : -ph - H / 2;
-        mk('text', { x: f2(-W / 2 + 10), y: f2(mid + 3.9), class: 'tag' }, g).textContent = tag;
-        mk('text', { x: f2(-W / 2 + 10 + tagW + 6), y: f2(mid + 4.8), class: 'nm' }, g).textContent = nm;
+        const words = [mk('text', { x: f2(-W / 2 + 10), y: f2(mid + 3.9), class: 'tag' }, g), mk('text', { x: f2(-W / 2 + 10 + tagW + 6), y: f2(mid + 4.8), class: 'nm' }, g)];
+        words[0].textContent = tag; words[1].textContent = nm;
+        if (cls === 'to') {
+          const box = { x: f2(-W / 2 - 4), y: f2(below ? -4 : -ph - H - 4), width: W + 8, height: ph + H + 8 };
+          for (const e of [pinF, pinM]) for (const a in box) e.setAttribute(a, box[a]);
+          mk('g', { class: 'pin to' }, mk('g', { filter: 'url(#pin-f)' }, pinM)).append(...words.map(w => w.cloneNode(true)));
+          body.setAttribute('mask', 'url(#pin-m)');
+        }
       });
       // line badges at the ends of each line
       if (k >= 1.5) badges.forEach((b, bi) => {
@@ -1664,6 +1714,10 @@ if (typeof module !== 'undefined') module.exports = { makeRouter, doorAt, descri
         if (L.parts.length === 1) t.textContent = L.parts[0];
         else L.parts.forEach((p, i) => { mk('tspan', { x: tx, dy: i ? f2(F * 1.18) : 0 }, t).textContent = p; });
       }
+      // copies of the pins (with their halo, whole face) for the cut, see 'cut-m'
+      const pins = gP.cloneNode(true);
+      for (const e of pins.querySelectorAll('[mask]')) e.removeAttribute('mask');
+      cutSrc.replaceChildren(pins);
       drawSel();
     }
     function drawSel() {
