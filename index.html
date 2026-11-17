@@ -153,10 +153,9 @@ button { cursor: pointer; }
 #map .names { filter: url(#halo-l); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) #map .names { filter: url(#halo-d); } }
 :root[data-theme="dark"] #map .names { filter: url(#halo-d); }
-/* pin halos are not painted: their copies in the mask 'cut-m' cut them out of the map below, which shows the map box's
-   background. Only the copies in .cutsrc show the halo, for its size. */
+/* pin halos are not painted: the clip 'cut-c' cuts each pin, grown by the halo, out of the map below, which shows the map
+   box's background, also where the start pin's face is left unpainted (26판; a mask until 25판) */
 #map .over .pin .halo { visibility: hidden; }
-#map g.cutsrc .pin .body { fill: #000; }   /* the whole face is cut, also where the start pin's face is left unpainted */
 #map .lbl.b { font-weight: 700; }
 #map .lbl.off, #map .lbl.dim { fill: var(--muted); }
 #map .bdg rect { stroke: url(#pb-map) var(--mapbg); stroke-width: 1.5px; }
@@ -1631,8 +1630,11 @@ if (typeof module !== 'undefined') module.exports = { makeRouter, doorAt, descri
     // recoloured them: dark letters get the light map ground, light letters a dark one (#1D1E1F is the ground Samsung's and
     // Chrome's dark modes give #FBFCFD; the page's own dark uses its own ground). The 13th test on the phone.
     const frac = (hex) => [1, 3, 5].map(i => (parseInt(hex.substr(i, 2), 16) / 255).toFixed(3));
+    const halos = [];
     const haloOf = (id, light, dark) => {
-      const f = mk('filter', { id, 'color-interpolation-filters': 'sRGB' }, defs), L = frac(light), D = frac(dark);
+      // region in user space, set to the view by fitCut (26판): the names of the whole network were far too big for WebKit
+      const f = mk('filter', { id, filterUnits: 'userSpaceOnUse', 'color-interpolation-filters': 'sRGB' }, defs), L = frac(light), D = frac(dark);
+      halos.push(f);
       mk('feMorphology', { in: 'SourceGraphic', operator: 'dilate', radius: 1.7, result: 'fat' }, f);
       mk('feColorMatrix', { in: 'fat', type: 'matrix', values: '.299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 0 0 0 1 0' }, f);
       const t = mk('feComponentTransfer', {}, f);
@@ -1641,14 +1643,48 @@ if (typeof module !== 'undefined') module.exports = { makeRouter, doorAt, descri
     };
     haloOf('halo-l', '#FBFCFD', '#1D1E1F'); haloOf('halo-d', '#FBFCFD', '#111A21');
     // Start/end pins: their outline (and the start pin's face) is cut out of the map below them, so the map box's own
-    // background shows there in whatever colour a dark mode gives it (the 11th test). The mask counts only how much the
-    // copies of the pins cover (an alpha mask), so their colours do not matter. Names are not cut this way: a second copy of
-    // every name made each frame of a pan half as slow again.
-    const AREA = { x: FULL.x - 400, y: FULL.y - 400, width: FULL.w + 800, height: FULL.h + 800 };
+    // background shows there in whatever colour a dark mode gives it (the 11th test). Names are not cut this way: a second
+    // copy of every name made each frame of a pan half as slow again.
+    // 26판: the cut is a clip path, shapes only: the view (with a margin) less each pin grown by its 2.5px halo, even-odd.
+    // Until 25판 it was an alpha mask over the whole network holding a filtered copy of the pins. On the rider's iPad
+    // (WebKit: Safari and the Claude app on iPad and iPhone) that mask came out empty and hid every line and station,
+    // leaving the names and pins on a blank map (2026-11-17); making its region small did not help there. A clip path
+    // has no colours, so a browser's forced dark cannot change it either.
+    const AREA = { x: FULL.x - 400, y: FULL.y - 400, width: FULL.w + 800, height: FULL.h + 800 };   // the veil
     const cutOut = (id, attrs) => { const f = mk('filter', { id, filterUnits: 'userSpaceOnUse', ...attrs }, defs); mk('feFlood', { 'flood-opacity': 1, result: 'all' }, f); mk('feComposite', { in: 'all', in2: 'SourceAlpha', operator: 'out' }, f); return f; };
     const alphaMask = (id, attrs) => mk('mask', { id, maskUnits: 'userSpaceOnUse', ...attrs, 'mask-type': 'alpha', style: 'mask-type:alpha' }, defs);
-    cutOut('cut-f', AREA);
-    const cutSrc = mk('g', { class: 'cutsrc' }, mk('g', { filter: 'url(#cut-f)' }, alphaMask('cut-m', AREA)));
+    const cutPath = mk('path', { 'clip-rule': 'evenodd' }, mk('clipPath', { id: 'cut-c', clipPathUnits: 'userSpaceOnUse' }, defs));
+    let cutHoles = '';   // the grown pins, in overlay units, from drawOverlay
+    // The clip and the name outlines cover only the view and a margin round it (26판): a filter region as big as the whole
+    // network is also more than WebKit applies (about 14,000 x 13,000 device pixels on an iPad). The region is set again
+    // only when the view leaves it or zooms in well past it, not on every frame of a pan, so the filtered names are not
+    // drawn again each frame.
+    const CUT_MARGIN = 0.5;
+    let cutBox = null, cutK = 0;
+    function fitCut(force) {
+      const b = cutBox;
+      if (!force && b && cutK === KO && vb.x >= b.x && vb.y >= b.y && vb.x + vb.w <= b.x + b.w && vb.y + vb.h <= b.y + b.h
+        && b.w <= vb.w * (1 + 2 * CUT_MARGIN) * 1.25) return;
+      cutBox = { x: vb.x - vb.w * CUT_MARGIN, y: vb.y - vb.h * CUT_MARGIN, w: vb.w * (1 + 2 * CUT_MARGIN), h: vb.h * (1 + 2 * CUT_MARGIN) };
+      cutK = KO;
+      // the names' filter works in the overlay's units: map units times the step KO
+      const over = { x: f2(cutBox.x * KO), y: f2(cutBox.y * KO), width: f2(cutBox.w * KO), height: f2(cutBox.h * KO) };
+      for (const e of halos) for (const a in over) e.setAttribute(a, over[a]);
+      setCut();
+    }
+    function setCut() {
+      if (!cutBox) return;
+      const s = KO, x0 = f2(cutBox.x * s), y0 = f2(cutBox.y * s), x1 = f2((cutBox.x + cutBox.w) * s), y1 = f2((cutBox.y + cutBox.h) * s);
+      cutPath.setAttribute('d', `M${x0} ${y0}H${x1}V${y1}H${x0}Z` + cutHoles);
+      cutPath.setAttribute('transform', `scale(${(1 / s).toFixed(5)})`);
+    }
+    // a pin's outline grown by e (its halo is a 5px stroke), at its tip (tx, ty), for the clip
+    function pinHole(tx, ty, W, H, ph, below, e) {
+      const R = H / 2 + e, a = f2(tx - W / 2 + H / 2), b = f2(tx + W / 2 - H / 2), pw = 6 + e, X = (v) => f2(tx + v), Y = (v) => f2(ty + v);
+      if (!below) { const yb = -ph + e, yt = -ph - H - e; return `M${a} ${Y(yt)}H${b}A${R} ${R} 0 0 1 ${b} ${Y(yb)}H${X(pw)}L${X(0)} ${Y(e)}L${X(-pw)} ${Y(yb)}H${a}A${R} ${R} 0 0 1 ${a} ${Y(yt)}Z`; }
+      const yt = ph - e, yb = ph + H + e;
+      return `M${a} ${Y(yt)}H${X(-pw)}L${X(0)} ${Y(-e)}L${X(pw)} ${Y(yt)}H${b}A${R} ${R} 0 0 1 ${b} ${Y(yb)}H${a}A${R} ${R} 0 0 1 ${a} ${Y(yt)}Z`;
+    }
     // the end pin's dark face has its name cut out the same way: under a forced dark the face turns light and the name stays the ground
     const pinF = cutOut('pin-f', {}), pinM = alphaMask('pin-m', {});
     // a fixed colour (line badges) painted the same way; the flat colour is the fallback
@@ -1658,7 +1694,7 @@ if (typeof module !== 'undefined') module.exports = { makeRouter, doorAt, descri
     };
 
     // ---- draw the network once ----
-    const gUnder = mk('g', { class: 'under', mask: 'url(#cut-m)' }, svg);
+    const gUnder = mk('g', { class: 'under', 'clip-path': 'url(#cut-c)' }, svg);
     const gNet = mk('g', { class: 'net' }, gUnder);
     for (const l of lines) {
       const runs = l.runs.filter(r => r.D.length > 1);
@@ -1757,9 +1793,11 @@ if (typeof module !== 'undefined') module.exports = { makeRouter, doorAt, descri
       dirty = false;
       if (!SZ) return;
       const k = KO = K, X = (v) => v * k;
+      fitCut(true);   // the names' outline region is in overlay units, which change with the step
       const sc = `scale(${(1 / k).toFixed(5)})`;
-      for (const g of [gOver, gSelIn, cutSrc]) g.setAttribute('transform', sc);
+      for (const g of [gOver, gSelIn]) g.setAttribute('transform', sc);
       gB.textContent = ''; gL.textContent = ''; gP.textContent = ''; pinM.textContent = '';
+      let holes = '';
       const grid = makeGrid(72);
       // start and end pins win every collision
       const placed = [], endSet = new Set();
@@ -1778,6 +1816,7 @@ if (typeof module !== 'undefined') module.exports = { makeRouter, doorAt, descri
         placed.push(bb); grid.add([bb[0] - 2, bb[1] - 2, bb[2] + 2, bb[3] + 2], -2);
         const g = mk('g', { class: 'pin ' + cls, transform: `translate(${f2(tip[0])} ${f2(tip[1])})` }, gP);
         const d = pinPath(W, H, ph, below);
+        holes += pinHole(tip[0], tip[1], W, H, ph, below, 2.5);
         mk('path', { d, class: 'halo' }, g);
         const body = mk('path', { d, class: 'body' }, g);
         const mid = below ? ph + H / 2 : -ph - H / 2;
@@ -1838,10 +1877,9 @@ if (typeof module !== 'undefined') module.exports = { makeRouter, doorAt, descri
         if (L.parts.length === 1) t.textContent = L.parts[0];
         else L.parts.forEach((p, i) => { mk('tspan', { x: tx, dy: i ? f2(F * 1.18) : 0 }, t).textContent = p; });
       }
-      // copies of the pins (with their halo, whole face) for the cut, see 'cut-m'
-      const pins = gP.cloneNode(true);
-      for (const e of pins.querySelectorAll('[mask]')) e.removeAttribute('mask');
-      cutSrc.replaceChildren(pins);
+      // the pins, grown by their halo, cut out of the map below (clip 'cut-c')
+      cutHoles = holes;
+      setCut();
       drawSel();
     }
     function drawSel() {
@@ -1863,6 +1901,7 @@ if (typeof module !== 'undefined') module.exports = { makeRouter, doorAt, descri
       const cx = clamp(vb.x + vb.w / 2, FULL.x, FULL.x + FULL.w), cy = clamp(vb.y + vb.h / 2, FULL.y, FULL.y + FULL.h);
       vb.x = cx - vb.w / 2; vb.y = cy - vb.h / 2;
       svg.setAttribute('viewBox', `${f2(vb.x)} ${f2(vb.y)} ${f2(vb.w)} ${f2(vb.h)}`);
+      fitCut();
       setBucket(r.width / vb.w);
       updateVeil();
       if (dirty) schedule();
