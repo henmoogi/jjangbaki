@@ -106,7 +106,12 @@ button { cursor: pointer; }
 .tabs button { border: 0; background: none; padding: 8px 4px 10px; font-size: 14px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
 .tabs button[aria-selected="true"] { color: var(--ink); font-weight: 700; border-bottom-color: var(--ink); }
 .mappane { display: grid; gap: 8px; }
-.picks { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 6px; align-items: stretch; }
+.picks { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 6px; align-items: stretch; }
+/* the start and end boxes take typing too (25판): the list opens across both boxes, the map stays the other way to pick */
+.pick { cursor: text; }
+.pick input.v { flex: 1; min-width: 0; width: 100%; border: 0; padding: 0; background: none; color: var(--ink); outline: none; }
+.pick input.v::placeholder { color: var(--muted); font-weight: 500; }
+.pick:focus-within { border-color: var(--focus); background: var(--panel); outline: 2px solid var(--focus); outline-offset: 1px; }
 .pick { border: 1px solid var(--rule); background: var(--ground); border-radius: 10px; padding: 6px 10px; display: flex; align-items: baseline; gap: 8px; text-align: left; min-width: 0; }
 .pick .k { font-size: 12px; color: var(--muted); flex: none; }
 .pick .v { font-weight: 700; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -380,9 +385,11 @@ button.name[aria-expanded="true"] strong { text-decoration-color: var(--ink); }
     </div>
     <div id="pane-map" role="tabpanel" aria-labelledby="tab-map" class="mappane">
       <div class="picks">
-        <button type="button" class="pick" id="pick-from"><span class="k" data-en="From">출발</span><span class="v" id="pick-from-v">—</span></button>
+        <label class="pick" id="pick-from"><span class="k" data-en="From">출발</span><input class="v" id="pick-from-v" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="sug-pick-from-v" autocomplete="off" enterkeyhint="search"></label>
         <button type="button" class="swap-s" id="swap2" aria-label="출발과 도착 바꾸기" data-en-aria="Swap start and end">⇄</button>
-        <button type="button" class="pick" id="pick-to"><span class="k" data-en="To">도착</span><span class="v" id="pick-to-v">—</span></button>
+        <label class="pick" id="pick-to"><span class="k" data-en="To">도착</span><input class="v" id="pick-to-v" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="sug-pick-to-v" autocomplete="off" enterkeyhint="search"></label>
+        <div class="suggest" id="sug-pick-from-v" role="listbox" hidden></div>
+        <div class="suggest" id="sug-pick-to-v" role="listbox" hidden></div>
       </div>
       <div class="mapbox" id="mapbox">
         <svg id="map" role="img" aria-label="수도권 지하철 노선도. 역을 누르면 출발역이나 도착역으로 고를 수 있어요." data-en-aria="Seoul metropolitan subway map. Tap a station to pick it as start or end."></svg>
@@ -399,7 +406,7 @@ button.name[aria-expanded="true"] strong { text-decoration-color: var(--ink); }
           </div>
           <div class="pop-note" id="pop-note" hidden data-en="This station is not in route search yet.">이 역은 아직 경로 검색에 없어요.</div>
         </div>
-        <div class="maphint" id="maphint" data-en="Tap stations to pick start and end · pinch to zoom">역을 눌러 출발과 도착을 고르세요 · 두 손가락으로 확대</div>
+        <div class="maphint" id="maphint" data-en="Tap stations, or type names in the boxes above · pinch to zoom">역을 누르거나 위 칸에 역 이름을 쳐서 고르세요 · 두 손가락으로 확대</div>
       </div>
     </div>
     <div id="pane-name" role="tabpanel" aria-labelledby="tab-name" hidden>
@@ -861,11 +868,13 @@ if (typeof module !== 'undefined') module.exports = { makeRouter, doorAt, descri
     }
     return wrap;
   }
-  function setupInput(id) {
+  // id: the text box; onPick(station): what choosing from the list does (name tab: fill the box and search when both ends
+  // are known; the boxes above the map, 25판: pickEnd); onEnter(): Enter with no list open
+  function setupInput(id, onPick, onEnter) {
     const input = $(id), box = $('sug-' + id);
     let items = [], sel = -1;
     const close = () => { box.hidden = true; input.setAttribute('aria-expanded', 'false'); sel = -1; };
-    const choose = (name) => { input.value = nameOf(name); close(); autoRun(); };
+    const choose = onPick ? (name) => { close(); onPick(name); } : (name) => { input.value = nameOf(name); close(); autoRun(); };
     const render = () => {
       const q = input.value.trim();
       box.textContent = '';
@@ -891,10 +900,10 @@ if (typeof module !== 'undefined') module.exports = { makeRouter, doorAt, descri
     input.addEventListener('input', () => { sel = -1; render(); });
     input.addEventListener('focus', () => { if (input.value.trim() && !resolveExact(input.value.trim())) render(); });
     input.addEventListener('blur', () => setTimeout(close, 120));
-    input.addEventListener('change', autoRun);
+    if (!onPick) input.addEventListener('change', autoRun);
     input.addEventListener('keydown', (e) => {
       // there is no submit button, so Enter on a typed name runs the search itself
-      if (box.hidden) { if (e.key === 'Enter') { e.preventDefault(); run(); } return; }
+      if (box.hidden) { if (e.key === 'Enter') { e.preventDefault(); (onEnter || run)(); } return; }
       if (e.key === 'ArrowDown') { sel = Math.min(items.length - 1, sel + 1); render(); e.preventDefault(); }
       else if (e.key === 'ArrowUp') { sel = Math.max(0, sel - 1); render(); e.preventDefault(); }
       else if (e.key === 'Enter') { choose(items[Math.max(sel, 0)]); e.preventDefault(); }
@@ -1409,15 +1418,45 @@ if (typeof module !== 'undefined') module.exports = { makeRouter, doorAt, descri
   let pickTarget = 'from';
   function syncPicks() {
     const f = resolveName($('from').value), t = resolveName($('to').value);
-    $('pick-from-v').textContent = nameOf(f) || '—';
-    $('pick-to-v').textContent = nameOf(t) || '—';
+    // the box being typed in keeps what the rider is typing
+    for (const [which, n] of [['from', f], ['to', t]]) {
+      const box = $(`pick-${which}-v`);
+      if (document.activeElement !== box) box.value = nameOf(n) || '';
+    }
     $('pick-from').classList.toggle('active', pickTarget === 'from');
     $('pick-to').classList.toggle('active', pickTarget === 'to');
     if (mapApi) mapApi.showEnds(f, t);
   }
   const startPick = (which) => { pickTarget = which; syncPicks(); if (mapApi) mapApi.setPicking(true); };
-  $('pick-from').addEventListener('click', () => startPick('from'));
-  $('pick-to').addEventListener('click', () => startPick('to'));
+  // a station chosen for one end, by a tap on the map or typed into the box above it: the next tap fills the other end,
+  // and with both ends known the route is found
+  function pickEnd(which, name) {
+    $(which).value = nameOf(name);
+    pickTarget = which === 'from' ? 'to' : 'from';
+    syncPicks();
+    $('maphint').hidden = true;
+    const f = resolveName($('from').value), t = resolveName($('to').value);
+    if (f && t && f !== t) {
+      run();
+      // after choosing the destination, bring the answer into view; after choosing the start, stay on the map
+      const res = $('result');
+      const calmMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (which === 'to' && res.getBoundingClientRect().top > window.innerHeight * 0.85) res.scrollIntoView({ behavior: calmMotion ? 'auto' : 'smooth', block: 'start' });
+    }
+  }
+  // the start and end boxes above the map (25판): tap one to say which end the map fills next, or type a name in it
+  for (const which of ['from', 'to']) {
+    const id = `pick-${which}-v`, box = $(id);
+    box.placeholder = tr('역 이름', 'Station');
+    const done = (name) => { box.value = nameOf(name); box.blur(); pickEnd(which, name); };
+    setupInput(id, done, () => {
+      const n = resolveName(box.value);
+      if (n) done(n); else box.select();
+    });
+    box.addEventListener('focus', () => { startPick(which); box.select(); });
+    // left without choosing: show the end that is set again
+    box.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== box) syncPicks(); }, 150));
+  }
 
   // clear the search: both ends, the result and the route on the map. It stays cleared on the next visit.
   $('reset').addEventListener('click', () => {
@@ -1964,20 +2003,12 @@ if (typeof module !== 'undefined') module.exports = { makeRouter, doorAt, descri
       drawSel();
     }
     function closePop() { $('pop').hidden = true; popFor = null; updateVeil(); drawSel(); }
+    // same as typing the name into the box above the map (pickEnd in the page)
     const choose = (which) => {
       if (!popFor || !popFor.n) return;
-      $(which).value = nameOf(popFor.n);
+      const n = popFor.n;
       closePop();
-      pickTarget = which === 'from' ? 'to' : 'from';
-      syncPicks();
-      const f = resolveName($('from').value), t = resolveName($('to').value);
-      $('maphint').hidden = true;
-      if (f && t && f !== t) {
-        run();
-        // after choosing the destination, bring the answer into view; after choosing the start, stay on the map
-        const res = $('result');
-        if (which === 'to' && res.getBoundingClientRect().top > window.innerHeight * 0.85) res.scrollIntoView({ behavior: calm() ? 'auto' : 'smooth', block: 'start' });
-      }
+      pickEnd(which, n);
     };
     $('pop-from').addEventListener('click', () => choose('from'));
     $('pop-to').addEventListener('click', () => choose('to'));
